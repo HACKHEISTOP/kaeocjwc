@@ -5,7 +5,7 @@ from config import DB_URI, DB_NAME
 dbclient = pymongo.MongoClient(DB_URI)
 database = dbclient[DB_NAME]
 user_data = database['users']
-config_data = database['config']
+config_data = database['cofig']
 join_requests = database['join_requests']  # Collection for join request tracking
 
 # Existing user management functions
