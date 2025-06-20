@@ -9,7 +9,7 @@ from config import FORCE_SUB_CHANNEL, ADMINS, AUTO_DELETE_TIME, AUTO_DEL_SUCCESS
 from pyrogram.errors.exceptions.bad_request_400 import UserNotParticipant
 from pyrogram.errors import FloodWait
 from pyrogram import Client, filters
-from database import get_force_sub_channels, has_pending_join_request
+from database.database import get_force_sub_channels, has_pending_join_request
 
 async def is_subscribed(filter, client: Client, update):
     FORCE_SUB_CHANNELS = await get_force_sub_channels()
