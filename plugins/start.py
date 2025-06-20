@@ -158,6 +158,8 @@ WAIT_MSG = """"<b>Processing ...</b>"""
 REPLY_ERROR = """<code>Use this command as a replay to any telegram message with out any spaces.</code>"""
 
 #=====================================================================================##
+
+
 @Bot.on_message(filters.command('start') & filters.private)
 async def not_joined(client: Client, message: Message):
     FORCE_SUB_CHANNELS = await get_force_sub_channels()
@@ -169,32 +171,41 @@ async def not_joined(client: Client, message: Message):
     buttons = []
     not_joined_channels = []
 
-    # Check membership and pending requests
+    # Check membership for each channel
     for channel in FORCE_SUB_CHANNELS:
         try:
             member = await client.get_chat_member(chat_id=channel['id'], user_id=message.from_user.id)
             if member.status not in [ChatMemberStatus.OWNER, ChatMemberStatus.ADMINISTRATOR, ChatMemberStatus.MEMBER]:
-                if channel['join_request'] and await has_pending_join_request(message.from_user.id, channel['id']):
-                    continue
                 not_joined_channels.append(channel)
         except UserNotParticipant:
-            if channel['join_request'] and await has_pending_join_request(message.from_user.id, channel['id']):
-                continue
             not_joined_channels.append(channel)
         except Exception:
             not_joined_channels.append(channel)
 
-    # Generate callback buttons
+    # Generate invite links for unjoined channels
     if not_joined_channels:
         for channel in not_joined_channels:
-            callback_data = f"join_{channel['id']}_{message.from_user.id}"
-            buttons.append(
-                InlineKeyboardButton(
-                    text=f"Join {channel['name']}",
-                    callback_data=callback_data
+            try:
+                if channel['join_request']:
+                    invite = await client.create_chat_invite_link(
+                        chat_id=channel['id'],
+                        creates_join_request=True
+                    )
+                    ButtonUrl = invite.invite_link
+                else:
+                    chat = await client.get_chat(channel['id'])
+                    ButtonUrl = chat.invite_link or f"https://t.me/{channel['id']}"
+                buttons.append(
+                    InlineKeyboardButton(
+                        text=f"Join {channel['name']}",
+                        url=ButtonUrl
+                    )
                 )
-            )
+            except Exception as e:
+                await message.reply(f"Error generating invite link for {channel['id']}: {str(e)}")
+                return
 
+        # Organize buttons in rows of two
         button_rows = [buttons[i:i+2] for i in range(0, len(buttons), 2)]
 
         try:
@@ -221,52 +232,6 @@ async def not_joined(client: Client, message: Message):
             quote=True,
             disable_web_page_preview=True
         )
-
-@Bot.on_callback_query(filters.regex(r'^join_') & filters.private)
-async def join_callback(client: Client, callback_query):
-    try:
-        _, channel_id, user_id = callback_query.data.split('_')
-        user_id = int(user_id)
-
-        if user_id != callback_query.from_user.id:
-            await callback_query.answer("This button is not for you!", show_alert=True)
-            return
-
-        channel = next((ch for ch in await get_force_sub_channels() if ch['id'] == channel_id), None)
-        if not channel:
-            await callback_query.answer("Channel not found!", show_alert=True)
-            return
-
-        if channel['join_request']:
-            invite = await client.create_chat_invite_link(
-                chat_id=channel_id,
-                creates_join_request=True
-            )
-            await add_join_request(user_id, channel_id)
-        else:
-            chat = await client.get_chat(channel_id)
-            invite = InlineKeyboardButton(
-                text=f"Join {channel['name']}",
-                url=chat.invite_link or f"https://t.me/{channel_id}"
-            )
-
-        try:
-            member = await client.get_chat_member(chat_id=channel_id, user_id=user_id)
-            if member.status in [ChatMemberStatus.OWNER, ChatMemberStatus.ADMINISTRATOR, ChatMemberStatus.MEMBER]:
-                await clear_join_request(user_id, channel_id)
-                await callback_query.message.edit_text("You are now subscribed to all required channels!")
-                return
-        except UserNotParticipant:
-            pass
-
-        await callback_query.message.reply(
-            f"Please join {channel['name']} using this link: {invite.invite_link}",
-            reply_markup=InlineKeyboardMarkup([[invite]])
-        )
-        await callback_query.answer("Join the channel and try /start again!")
-
-    except Exception as e:
-        await callback_query.answer(f"Error: {str(e)}", show_alert=True)
 
 @Bot.on_message(filters.command('addforcesub') & filters.user(ADMINS))
 async def add_force_sub(client: Client, message: Message):
