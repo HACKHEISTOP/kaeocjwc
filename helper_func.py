@@ -4,27 +4,41 @@ import base64
 import re
 import asyncio
 import logging 
-from pyrogram import filters
 from pyrogram.enums import ChatMemberStatus
 from config import FORCE_SUB_CHANNEL, ADMINS, AUTO_DELETE_TIME, AUTO_DEL_SUCCESS_MSG
 from pyrogram.errors.exceptions.bad_request_400 import UserNotParticipant
 from pyrogram.errors import FloodWait
+from pyrogram import Client, filters
+from database import get_force_sub_channels, has_pending_join_request
 
-async def is_subscribed(filter, client, update):
-    if not FORCE_SUB_CHANNEL:
+async def is_subscribed(filter, client: Client, update):
+    FORCE_SUB_CHANNELS = await get_force_sub_channels()
+    
+    if not FORCE_SUB_CHANNELS:
         return True
+    
     user_id = update.from_user.id
-    if user_id in ADMINS:
+    if user_id in ADMINS:  # Assuming ADMINS is in config.py
         return True
-    try:
-        member = await client.get_chat_member(chat_id = FORCE_SUB_CHANNEL, user_id = user_id)
-    except UserNotParticipant:
-        return False
-
-    if not member.status in [ChatMemberStatus.OWNER, ChatMemberStatus.ADMINISTRATOR, ChatMemberStatus.MEMBER]:
-        return False
-    else:
-        return True
+    
+    for channel in FORCE_SUB_CHANNELS:
+        try:
+            member = await client.get_chat_member(chat_id=channel['id'], user_id=user_id)
+            if member.status not in [ChatMemberStatus.OWNER, ChatMemberStatus.ADMINISTRATOR, ChatMemberStatus.MEMBER]:
+                # Optional: Allow pending join requests to count as subscribed
+                # if channel['join_request'] and await has_pending_join_request(user_id, channel['id']):
+                #     continue
+                return False
+        except UserNotParticipant:
+            # Same optional check
+            # if channel['join_request'] and await has_pending_join_request(user_id, channel['id']):
+            #     continue
+            return False
+        except Exception as e:
+            print(f"Error checking membership for {channel['id']}: {str(e)}")
+            return False
+    
+    return True
 
 async def encode(string):
     string_bytes = string.encode("ascii")
