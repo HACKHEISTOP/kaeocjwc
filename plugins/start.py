@@ -10,7 +10,7 @@ from pyrogram.errors import FloodWait, UserIsBlocked, InputUserDeactivated
 from bot import Bot
 from config import ADMINS, FORCE_MSG, START_MSG, CUSTOM_CAPTION, DISABLE_CHANNEL_BUTTON, PROTECT_CONTENT, START_PIC, AUTO_DELETE_TIME, AUTO_DELETE_MSG, JOIN_REQUEST_ENABLE,FORCE_SUB_CHANNEL
 from helper_func import subscribed,decode, get_messages, delete_file
-from database.database import add_user, del_user, full_userbase, present_user, get_force_sub_channels, has_pending_join_request, add_join_request
+from database.database import add_user, del_user, full_userbase, present_user, get_force_sub_channels, has_pending_join_request, add_join_request, clear_join_request, add_force_sub_channel, remove_force_sub_channel, set_channel_join_request
 
 
 @Bot.on_message(filters.command('start') & filters.private & subscribed)
@@ -222,6 +222,110 @@ async def not_joined(client: Client, message: Message):
             quote=True,
             disable_web_page_preview=True
         )
+
+@Bot.on_callback_query(filters.regex(r'^join_') & filters.private)
+async def join_callback(client: Client, callback_query):
+    try:
+        _, channel_id, user_id = callback_query.data.split('_')
+        user_id = int(user_id)
+
+        if user_id != callback_query.from_user.id:
+            await callback_query.answer("This button is not for you!", show_alert=True)
+            return
+
+        channel = next((ch for ch in await get_force_sub_channels() if ch['id'] == channel_id), None)
+        if not channel:
+            await callback_query.answer("Channel not found!", show_alert=True)
+            return
+
+        if channel['join_request']:
+            invite = await client.create_chat_invite_link(
+                chat_id=channel_id,
+                creates_join_request=True
+            )
+            await add_join_request(user_id, channel_id)
+        else:
+            chat = await client.get_chat(channel_id)
+            invite = InlineKeyboardButton(
+                text=f"Join {channel['name']}",
+                url=chat.invite_link or f"https://t.me/{channel_id}"
+            )
+
+        try:
+            member = await client.get_chat_member(chat_id=channel_id, user_id=user_id)
+            if member.status in [ChatMemberStatus.OWNER, ChatMemberStatus.ADMINISTRATOR, ChatMemberStatus.MEMBER]:
+                await clear_join_request(user_id, channel_id)
+                await callback_query.message.edit_text("You are now subscribed to all required channels!")
+                return
+        except UserNotParticipant:
+            pass
+
+        await callback_query.message.reply(
+            f"Please join {channel['name']} using this link: {invite.invite_link}",
+            reply_markup=InlineKeyboardMarkup([[invite]])
+        )
+        await callback_query.answer("Join the channel and try /start again!")
+
+    except Exception as e:
+        await callback_query.answer(f"Error: {str(e)}", show_alert=True)
+
+@Bot.on_message(filters.command('addforcesub') & filters.user(ADMINS))
+async def add_force_sub(client: Client, message: Message):
+    try:
+        parts = message.text.split(" : ", 1)
+        if len(parts) != 2:
+            raise IndexError
+        name, channel_id = parts
+        name = name.strip()[len("/addforcesub"):].strip()
+        channel_id = channel_id.strip()
+        if await add_force_sub_channel(name, channel_id):
+            await message.reply(f"Added {name} ({channel_id}) to force-subscribe channels.")
+        else:
+            await message.reply(f"{channel_id} is already in the force-subscribe list.")
+    except IndexError:
+        await message.reply("Usage: /addforcesub : <name> : <channel_id_or_username>")
+    except Exception as e:
+        await message.reply(f"Error: {str(e)}")
+
+@Bot.on_message(filters.command('removeforcesub') & filters.user(ADMINS))
+async def remove_force_sub(client: Client, message: Message):
+    try:
+        channel_id = message.command[1]
+        if await remove_force_sub_channel(channel_id):
+            await message.reply(f"Removed {channel_id} from force-subscribe channels.")
+        else:
+            await message.reply(f"{channel_id} is not in the force-subscribe list.")
+    except IndexError:
+        await message.reply("Usage: /removeforcesub <channel_id_or_username>")
+    except Exception as e:
+        await message.reply(f"Error: {str(e)}")
+
+@Bot.on_message(filters.command('setjoinrequest') & filters.user("YOUR_ADMIN_ID"))
+async def set_join_request(client: Client, message: Message):
+    try:
+        parts = message.text.split(" : ", 2)
+        if len(parts) != 3:
+            raise IndexError
+        _, channel_id, value = parts
+        channel_id = channel_id.strip()
+        value = value.strip().lower() == "true"
+        if await set_channel_join_request(channel_id, value):
+            await message.reply(f"JOIN_REQUEST for {channel_id} set to {value}")
+        else:
+            await message.reply(f"{channel_id} is not in the force-subscribe list.")
+    except IndexError:
+        await message.reply("Usage: /setjoinrequest : <channel_id_or_username> : true|false")
+    except Exception as e:
+        await message.reply(f"Error: {str(e)}")
+
+@Bot.on_message(filters.command('listforcesub') & filters.user(ADMINS))
+async def list_force_sub(client: Client, message: Message):
+    channels = await get_force_sub_channels()
+    if channels:
+        channel_list = "\n".join([f"{i+1}. {ch['name']} ({ch['id']}, Join Request: {ch['join_request']})" for i, ch in enumerate(channels)])
+        await message.reply(f"Force-subscribe channels:\n{channel_list}")
+    else:
+        await message.reply("No force-subscribe channels are set.")
     
 @Bot.on_message(filters.command('users') & filters.private & filters.user(ADMINS))
 async def get_users(client: Bot, message: Message):
