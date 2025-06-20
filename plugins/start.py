@@ -159,7 +159,6 @@ REPLY_ERROR = """<code>Use this command as a replay to any telegram message with
 
 #=====================================================================================##
 
-
 @Bot.on_message(filters.command('start') & filters.private)
 async def not_joined(client: Client, message: Message):
     FORCE_SUB_CHANNELS = await get_force_sub_channels()
@@ -175,12 +174,10 @@ async def not_joined(client: Client, message: Message):
     for channel in FORCE_SUB_CHANNELS:
         try:
             member = await client.get_chat_member(chat_id=channel['id'], user_id=message.from_user.id)
-            if member.status not in [ChatMemberStatus.OWNER, ChatMemberStatus.ADMINISTRATOR, ChatMemberStatus.MEMBER]:
+            if member.status not in ["owner", "administrator", "member"]:
                 not_joined_channels.append(channel)
-        except UserNotParticipant:
-            not_joined_channels.append(channel)
         except Exception:
-            not_joined_channels.append(channel)
+            not_joined_channels.append(channel)  # Assume not joined if error occurs
 
     # Generate invite links for unjoined channels
     if not_joined_channels:
@@ -193,8 +190,19 @@ async def not_joined(client: Client, message: Message):
                     )
                     ButtonUrl = invite.invite_link
                 else:
-                    chat = await client.get_chat(channel['id'])
-                    ButtonUrl = chat.invite_link or f"https://t.me/{channel['id']}"
+                    try:
+                        # Try to get chat to check if it's a username
+                        chat = await client.get_chat(channel['id'])
+                        ButtonUrl = chat.invite_link
+                        if not ButtonUrl:
+                            # Fallback for channels without invite links
+                            ButtonUrl = f"https://t.me/c/{str(channel['id']).replace('-100', '')}/1"
+                    except UsernameInvalid:
+                        # Handle numeric IDs directly
+                        ButtonUrl = f"https://t.me/c/{str(channel['id']).replace('-100', '')}/1"
+                    except ChatAdminRequired:
+                        await message.reply(f"Cannot generate invite link for {channel['name']} ({channel['id']}): Bot lacks admin permissions.")
+                        continue
                 buttons.append(
                     InlineKeyboardButton(
                         text=f"Join {channel['name']}",
@@ -202,8 +210,12 @@ async def not_joined(client: Client, message: Message):
                     )
                 )
             except Exception as e:
-                await message.reply(f"Error generating invite link for {channel['id']}: {str(e)}")
-                return
+                await message.reply(f"Error generating invite link for {channel['name']} ({channel['id']}): {str(e)}")
+                continue
+
+        if not buttons:
+            await message.reply("Unable to generate invite links for any channels. Please contact the admin.")
+            return
 
         # Organize buttons in rows of two
         button_rows = [buttons[i:i+2] for i in range(0, len(buttons), 2)]
@@ -232,7 +244,6 @@ async def not_joined(client: Client, message: Message):
             quote=True,
             disable_web_page_preview=True
         )
-
 @Bot.on_message(filters.command('addforcesub') & filters.user(ADMINS))
 async def add_force_sub(client: Client, message: Message):
     try:
