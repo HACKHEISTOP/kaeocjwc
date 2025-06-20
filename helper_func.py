@@ -34,65 +34,6 @@ async def is_subscribed(filter, client: Client, update):
             return False
     
     return True
-
-# Management commands
-@Bot.on_message(filters.command('addforcesub') & filters.user("YOUR_ADMIN_ID"))
-async def add_force_sub(client: Client, message: Message):
-    try:
-        parts = message.text.split(" : ", 1)
-        if len(parts) != 2:
-            raise IndexError
-        name, channel_id = parts
-        name = name.strip()[len("/addforcesub"):].strip()
-        channel_id = channel_id.strip()
-        if await add_force_sub_channel(name, channel_id):
-            await message.reply(f"Added {name} ({channel_id}) to force-subscribe channels.")
-        else:
-            await message.reply(f"{channel_id} is already in the force-subscribe list.")
-    except IndexError:
-        await message.reply("Usage: /addforcesub : <name> : <channel_id_or_username>")
-    except Exception as e:
-        await message.reply(f"Error: {str(e)}")
-
-@Bot.on_message(filters.command('removeforcesub') & filters.user("YOUR_ADMIN_ID"))
-async def remove_force_sub(client: Client, message: Message):
-    try:
-        channel_id = message.command[1]
-        if await remove_force_sub_channel(channel_id):
-            await message.reply(f"Removed {channel_id} from force-subscribe channels.")
-        else:
-            await message.reply(f"{channel_id} is not in the force-subscribe list.")
-    except IndexError:
-        await message.reply("Usage: /removeforcesub <channel_id_or_username>")
-    except Exception as e:
-        await message.reply(f"Error: {str(e)}")
-
-@Bot.on_message(filters.command('setjoinrequest') & filters.user("YOUR_ADMIN_ID"))
-async def set_join_request(client: Client, message: Message):
-    try:
-        parts = message.text.split(" : ", 2)
-        if len(parts) != 3:
-            raise IndexError
-        _, channel_id, value = parts
-        channel_id = channel_id.strip()
-        value = value.strip().lower() == "true"
-        if await set_channel_join_request(channel_id, value):
-            await message.reply(f"JOIN_REQUEST for {channel_id} set to {value}")
-        else:
-            await message.reply(f"{channel_id} is not in the force-subscribe list.")
-    except IndexError:
-        await message.reply("Usage: /setjoinrequest : <channel_id_or_username> : true|false")
-    except Exception as e:
-        await message.reply(f"Error: {str(e)}")
-
-@Bot.on_message(filters.command('listforcesub') & filters.user("YOUR_ADMIN_ID"))
-async def list_force_sub(client: Client, message: Message):
-    channels = await get_force_sub_channels()
-    if channels:
-        channel_list = "\n".join([f"{i+1}. {ch['name']} ({ch['id']}, Join Request: {ch['join_request']})" for i, ch in enumerate(channels)])
-        await message.reply(f"Force-subscribe channels:\n{channel_list}")
-    else:
-        await message.reply("No force-subscribe channels are set.")
 async def encode(string):
     string_bytes = string.encode("ascii")
     base64_bytes = base64.urlsafe_b64encode(string_bytes)
