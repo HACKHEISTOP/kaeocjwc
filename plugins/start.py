@@ -10,7 +10,7 @@ from pyrogram.errors import FloodWait, UserIsBlocked, InputUserDeactivated
 from bot import Bot
 from config import ADMINS, FORCE_MSG, START_MSG, CUSTOM_CAPTION, DISABLE_CHANNEL_BUTTON, PROTECT_CONTENT, START_PIC, AUTO_DELETE_TIME, AUTO_DELETE_MSG, JOIN_REQUEST_ENABLE,FORCE_SUB_CHANNEL
 from helper_func import subscribed,decode, get_messages, delete_file
-from database.database import add_user, del_user, full_userbase, present_user
+from database.database import add_user, del_user, full_userbase, present_user, get_force_sub_channels, has_pending_join_request, add_join_request
 
 
 @Bot.on_message(filters.command('start') & filters.private & subscribed)
@@ -159,53 +159,70 @@ WAIT_MSG = """"<b>Processing ...</b>"""
 REPLY_ERROR = """<code>Use this command as a replay to any telegram message with out any spaces.</code>"""
 
 #=====================================================================================##
-
-
 @Bot.on_message(filters.command('start') & filters.private)
 async def not_joined(client: Client, message: Message):
+    FORCE_SUB_CHANNELS = await get_force_sub_channels()
 
-    if bool(JOIN_REQUEST_ENABLE):
-        invite = await client.create_chat_invite_link(
-            chat_id=FORCE_SUB_CHANNEL,
-            creates_join_request=True
-        )
-        ButtonUrl = invite.invite_link
-    else:
-        ButtonUrl = client.invitelink
+    if not FORCE_SUB_CHANNELS:
+        await message.reply("No force-subscribe channels are set!")
+        return
 
-    buttons = [
-        [
-            InlineKeyboardButton(
-                "Join Channel",
-                url = ButtonUrl)
-        ]
-    ]
+    buttons = []
+    not_joined_channels = []
 
-    try:
-        buttons.append(
-            [
+    # Check membership and pending requests
+    for channel in FORCE_SUB_CHANNELS:
+        try:
+            member = await client.get_chat_member(chat_id=channel['id'], user_id=message.from_user.id)
+            if member.status not in [ChatMemberStatus.OWNER, ChatMemberStatus.ADMINISTRATOR, ChatMemberStatus.MEMBER]:
+                if channel['join_request'] and await has_pending_join_request(message.from_user.id, channel['id']):
+                    continue
+                not_joined_channels.append(channel)
+        except UserNotParticipant:
+            if channel['join_request'] and await has_pending_join_request(message.from_user.id, channel['id']):
+                continue
+            not_joined_channels.append(channel)
+        except Exception:
+            not_joined_channels.append(channel)
+
+    # Generate callback buttons
+    if not_joined_channels:
+        for channel in not_joined_channels:
+            callback_data = f"join_{channel['id']}_{message.from_user.id}"
+            buttons.append(
                 InlineKeyboardButton(
-                    text = 'Try Again',
-                    url = f"https://t.me/{client.username}?start={message.command[1]}"
+                    text=f"Join {channel['name']}",
+                    callback_data=callback_data
                 )
-            ]
-        )
-    except IndexError:
-        pass
+            )
 
-    await message.reply(
-        text = FORCE_MSG.format(
-                first = message.from_user.first_name,
-                last = message.from_user.last_name,
-                username = None if not message.from_user.username else '@' + message.from_user.username,
-                mention = message.from_user.mention,
-                id = message.from_user.id
+        button_rows = [buttons[i:i+2] for i in range(0, len(buttons), 2)]
+
+        try:
+            button_rows.append(
+                [
+                    InlineKeyboardButton(
+                        text="Try Again",
+                        url=f"https://t.me/{client.username}?start={message.command[1]}"
+                    )
+                ]
+            )
+        except IndexError:
+            pass
+
+        await message.reply(
+            text=FORCE_MSG.format(
+                first=message.from_user.first_name,
+                last=message.from_user.last_name,
+                username=None if not message.from_user.username else '@' + message.from_user.username,
+                mention=message.from_user.mention,
+                id=message.from_user.id
             ),
-        reply_markup = InlineKeyboardMarkup(buttons),
-        quote = True,
-        disable_web_page_preview = True
-    )
-
+            reply_markup=InlineKeyboardMarkup(button_rows),
+            quote=True,
+            disable_web_page_preview=True
+        )
+    
 @Bot.on_message(filters.command('users') & filters.private & filters.user(ADMINS))
 async def get_users(client: Bot, message: Message):
     msg = await client.send_message(chat_id=message.chat.id, text=WAIT_MSG)
