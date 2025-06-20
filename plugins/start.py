@@ -246,7 +246,7 @@ async def not_joined(client: Client, message: Message):
         )
 
 # Management commands
-@Bot.on_message(filters.command('addforcesub') & filters.user("YOUR_ADMIN_ID"))
+@Bot.on_message(filters.command('addforcesub') & filters.user(ADMINS))
 async def add_force_sub(client: Client, message: Message):
     try:
         parts = message.text.split(" : ", 1)
@@ -264,7 +264,7 @@ async def add_force_sub(client: Client, message: Message):
     except Exception as e:
         await message.reply(f"Error: {str(e)}")
 
-@Bot.on_message(filters.command('removeforcesub') & filters.user("YOUR_ADMIN_ID"))
+@Bot.on_message(filters.command('removeforcesub') & filters.user(ADMINS))
 async def remove_force_sub(client: Client, message: Message):
     try:
         channel_id = message.command[1]
@@ -277,7 +277,7 @@ async def remove_force_sub(client: Client, message: Message):
     except Exception as e:
         await message.reply(f"Error: {str(e)}")
 
-@Bot.on_message(filters.command('setjoinrequest') & filters.user("YOUR_ADMIN_ID"))
+@Bot.on_message(filters.command('setjoinrequest') & filters.user(ADMINS))
 async def set_join_request(client: Client, message: Message):
     try:
         parts = message.text.split(" : ", 2)
@@ -295,7 +295,7 @@ async def set_join_request(client: Client, message: Message):
     except Exception as e:
         await message.reply(f"Error: {str(e)}")
 
-@Bot.on_message(filters.command('listforcesub') & filters.user("YOUR_ADMIN_ID"))
+@Bot.on_message(filters.command('listforcesub') & filters.user(ADMINS))
 async def list_force_sub(client: Client, message: Message):
     channels = await get_force_sub_channels()
     if channels:
