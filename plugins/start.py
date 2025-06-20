@@ -9,7 +9,7 @@ from pyrogram.errors import FloodWait, UserIsBlocked, InputUserDeactivated, User
 from bot import Bot
 from config import ADMINS, FORCE_MSG, START_MSG, CUSTOM_CAPTION, DISABLE_CHANNEL_BUTTON, PROTECT_CONTENT, START_PIC, AUTO_DELETE_TIME, AUTO_DELETE_MSG, JOIN_REQUEST_ENABLE,FORCE_SUB_CHANNEL
 from helper_func import subscribed,decode, get_messages, delete_file
-from database.database import add_user, del_user, full_userbase, present_user, get_force_sub_channels, has_pending_join_request, add_join_request, clear_join_request, add_force_sub_channel, remove_force_sub_channel, set_channel_join_request
+from database.database import add_user, del_user, full_userbase, present_user, get_force_sub_channels, add_force_sub_channel, remove_force_sub_channel, set_channel_join_request
 
 
 @Bot.on_message(filters.command('start') & filters.private & subscribed)
@@ -244,7 +244,9 @@ async def not_joined(client: Client, message: Message):
             quote=True,
             disable_web_page_preview=True
         )
-@Bot.on_message(filters.command('addforcesub') & filters.user(ADMINS))
+
+# Management commands
+@Bot.on_message(filters.command('addforcesub') & filters.user("YOUR_ADMIN_ID"))
 async def add_force_sub(client: Client, message: Message):
     try:
         parts = message.text.split(" : ", 1)
@@ -262,7 +264,7 @@ async def add_force_sub(client: Client, message: Message):
     except Exception as e:
         await message.reply(f"Error: {str(e)}")
 
-@Bot.on_message(filters.command('removeforcesub') & filters.user(ADMINS))
+@Bot.on_message(filters.command('removeforcesub') & filters.user("YOUR_ADMIN_ID"))
 async def remove_force_sub(client: Client, message: Message):
     try:
         channel_id = message.command[1]
@@ -293,7 +295,7 @@ async def set_join_request(client: Client, message: Message):
     except Exception as e:
         await message.reply(f"Error: {str(e)}")
 
-@Bot.on_message(filters.command('listforcesub') & filters.user(ADMINS))
+@Bot.on_message(filters.command('listforcesub') & filters.user("YOUR_ADMIN_ID"))
 async def list_force_sub(client: Client, message: Message):
     channels = await get_force_sub_channels()
     if channels:
