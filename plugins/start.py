@@ -7,10 +7,9 @@ from pyrogram.enums import ParseMode
 from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
 from pyrogram.errors import FloodWait, UserIsBlocked, InputUserDeactivated, UserNotParticipant
 from bot import Bot
-from config import ADMINS, FORCE_MSG, START_MSG, CUSTOM_CAPTION, DISABLE_CHANNEL_BUTTON, PROTECT_CONTENT, START_PIC, AUTO_DELETE_TIME, AUTO_DELETE_MSG, JOIN_REQUEST_ENABLE,FORCE_SUB_CHANNEL
 from helper_func import subscribed,decode, get_messages, delete_file
 from database.database import add_user, del_user, full_userbase, present_user, get_force_sub_channels, add_force_sub_channel, remove_force_sub_channel, set_channel_join_request
-
+from config import *
 
 @Bot.on_message(filters.command('start') & filters.private & subscribed)
 async def start_command(client: Client, message: Message):
@@ -49,77 +48,124 @@ async def start_command(client: Client, message: Message):
                 ids = [int(int(argument[1]) / abs(client.db_channel.id))]
             except:
                 return
-        temp_msg = await message.reply("Please wait...")
+        temp_msg = await message.reply(
+            f"<b> 𝗪𝗮𝗶𝘁 𝗕𝗵𝗮𝗶 🥺.. </b>"
+            )
+        
         try:
             messages = await get_messages(client, ids)
-        except:
-            await message.reply_text("Something went wrong..!")
+            
+        except Exception as e:
+            await temp_msg.edit(f"Something went wrong: {str(e)}")
             return
         await temp_msg.delete()
 
-        track_msgs = []
-
+        codeflix_msgs = []
+        
         for msg in messages:
+            # Initialize filename and media_type with safe defaults
+            filename = "Unknown"
+            media_type = "Unknown"
 
-            if bool(CUSTOM_CAPTION) & bool(msg.document):
-                caption = CUSTOM_CAPTION.format(previouscaption = "" if not msg.caption else msg.caption.html, filename = msg.document.file_name)
-            else:
-                caption = "" if not msg.caption else msg.caption.html
+            # Determine the media type and filename
+            if msg.video:
+                media_type = "Video"
+                filename = msg.video.file_name if msg.video.file_name else "Unnamed Video"
+            elif msg.document:
+                filename = msg.document.file_name if msg.document.file_name else "Unnamed Document"
+                media_type = "PDF" if filename.endswith(".pdf") else "Document"
+            elif msg.photo:
+                media_type = "Image"
+                filename = "Image"
+            elif msg.text:
+                media_type = "Text"
+                filename = "Text Content"
 
-            if DISABLE_CHANNEL_BUTTON:
-                reply_markup = msg.reply_markup
-            else:
-                reply_markup = None
-
-            if AUTO_DELETE_TIME and AUTO_DELETE_TIME > 0:
-
-                try:
-                    copied_msg_for_deletion = await msg.copy(chat_id=message.from_user.id, caption=caption, parse_mode=ParseMode.HTML, reply_markup=reply_markup, protect_content=PROTECT_CONTENT)
-                    if copied_msg_for_deletion:
-                        track_msgs.append(copied_msg_for_deletion)
-                    else:
-                        print("Failed to copy message, skipping.")
-
-                except FloodWait as e:
-                    await asyncio.sleep(e.value)
-                    copied_msg_for_deletion = await msg.copy(chat_id=message.from_user.id, caption=caption, parse_mode=ParseMode.HTML, reply_markup=reply_markup, protect_content=PROTECT_CONTENT)
-                    if copied_msg_for_deletion:
-                        track_msgs.append(copied_msg_for_deletion)
-                    else:
-                        print("Failed to copy message after retry, skipping.")
-
-                except Exception as e:
-                    print(f"Error copying message: {e}")
-                    pass
-
-            else:
-                try:
-                    await msg.copy(chat_id=message.from_user.id, caption=caption, parse_mode=ParseMode.HTML, reply_markup=reply_markup, protect_content=PROTECT_CONTENT)
-                    await asyncio.sleep(0.5)
-                except FloodWait as e:
-                    await asyncio.sleep(e.value)
-                    await msg.copy(chat_id=message.from_user.id, caption=caption, parse_mode=ParseMode.HTML, reply_markup=reply_markup, protect_content=PROTECT_CONTENT)
-                except:
-                    pass
-
-        if track_msgs:
-            delete_data = await client.send_message(
-                chat_id=message.from_user.id,
-                text=AUTO_DELETE_MSG.format(time=AUTO_DELETE_TIME)
+    # Generate caption
+            caption = (
+                CUSTOM_CAPTION.format(
+                    previouscaption=(msg.caption.html if msg.caption else "𝗛𝗔𝗖𝗞𝗛𝗘𝗜𝗦𝗧 🔥"),
+                    filename=filename,
+                    mediatype=media_type,
+                )
+                if bool(CUSTOM_CAPTION)
+                else (msg.caption.html if msg.caption else "")
             )
-            # Schedule the file deletion task after all messages have been copied
-            asyncio.create_task(delete_file(track_msgs, client, delete_data))
-        else:
-            print("No messages to track for deletion.")
 
-        return
+            reply_markup = msg.reply_markup if DISABLE_CHANNEL_BUTTON else None
+
+
+            try:
+                # Use protect_content=True for new format, PROTECT_CONTENT for old format
+                protect_content = PROTECT_CONTENT
+                copied_msg = await msg.copy(
+                    chat_id=message.from_user.id,
+                    caption=caption,
+                    parse_mode=ParseMode.HTML,
+                    reply_markup=reply_markup,
+                    protect_content=protect_content
+                )
+                await asyncio.sleep(0.5)
+                codeflix_msgs.append(copied_msg)
+            except FloodWait as e:
+                await asyncio.sleep(e.x)
+                copied_msg = await msg.copy(
+                    chat_id=message.from_user.id,
+                    caption=caption,
+                    parse_mode=ParseMode.HTML,
+                    reply_markup=reply_markup,
+                    protect_content=protect_content
+                )
+                codeflix_msgs.append(copied_msg)
+            except Exception as e:
+                await message.reply_text(f"Error copying message: {str(e)}")
+        
+            await asyncio.sleep(0.4)
+
+        if AUTO_DELETE_TIME > 0:
+            notification_msg = await message.reply(
+                f"<b>Tʜɪs Fɪʟᴇ ᴡɪʟʟ ʙᴇ Dᴇʟᴇᴛᴇᴅ ɪɴ  {get_exp_time(FILE_AUTO_DELETE)}"
+                f"<blockquote><b>ʙᴜᴛ ᴅᴏɴ'ᴛ ᴡᴏʀʀʏ 😁 ᴀғᴛᴇʀ ᴅᴇʟᴇᴛᴇᴅ ʏᴏᴜ ᴄᴀɴ ᴀɢᴀɪɴ ᴀᴄᴄᴇss ᴛʜʀᴏᴜɢʜ ᴏᴜʀ ᴡᴇʙsɪᴛᴇs 😘</b></blockquote>"
+                f"<b> <a href=https://yashyasag.github.io/hiddens_officials>🌟 𝗢𝗧𝗛𝗘𝗥 𝗪𝗘𝗕𝗦𝗜𝗧𝗘𝗦 🌟</a></b>"
+            )
+
+            await asyncio.sleep(AUTO_DELETE_TIME)
+
+            for snt_msg in codeflix_msgs:    
+                if snt_msg:
+                    try:    
+                        await snt_msg.delete()  
+                    except Exception as e:
+                        print(f"Error deleting message {snt_msg.id}: {e}")
+
+            try:
+                reload_url = (
+                    "https://yashyasag.github.io/hiddens_officials"
+                    if message.command and len(message.command) > 1
+                    else None
+                )
+                keyboard = InlineKeyboardMarkup(
+                    [[InlineKeyboardButton("ɢᴇᴛ ғɪʟᴇ ᴀɢᴀɪɴ!", url=reload_url)]]
+                ) if reload_url else None
+
+                await notification_msg.edit(
+                    "<blockquote><b>ʏᴏᴜʀ ʟᴇᴄᴛᴜʀᴇs / ᴘᴅғ ɪs  ᴅᴇʟᴇᴛᴇᴅ !!\n</b></blockquote>"
+                    "<b>ᴄʟɪᴄᴋ ʙᴇʟᴏᴡ ʙᴜᴛᴛᴏɴ ᴛᴏ ɢᴇᴛ ʏᴏᴜʀ ᴅᴇʟᴇᴛᴇᴅ ʟᴇᴄᴛᴜʀᴇs / ᴘᴅғ 👇</b>\n\n"
+                    "<b> <a href=https://yashyasag.github.io/hiddens_officials>🌟 𝗢𝗧𝗛𝗘𝗥 𝗪𝗘𝗕𝗦𝗜𝗧𝗘𝗦 🌟</a></b>",
+                    reply_markup=keyboard
+                )
+            except Exception as e:
+                print(f"Error updating notification with 'Get File Again' button: {e}")
     else:
         reply_markup = InlineKeyboardMarkup(
             [
-                [
-                    InlineKeyboardButton("😊 About Me", callback_data = "about"),
-                    InlineKeyboardButton("🔒 Close", callback_data = "close")
-                ]
+                    [InlineKeyboardButton("• 𝗠𝗔𝗜𝗡 𝗪𝗘𝗕𝗦𝗜𝗧𝗘 •", url="https://yashyasag.github.io/hiddens_officials")],
+
+    [
+                    InlineKeyboardButton("• ᴀʙᴏᴜᴛ", callback_data = "about"),
+                    InlineKeyboardButton('ʜᴇʟᴘ •', callback_data = "help")
+
+    ]
             ]
         )
         if START_PIC:  # Check if START_PIC has a value
@@ -161,89 +207,66 @@ REPLY_ERROR = """<code>Use this command as a replay to any telegram message with
 
 @Bot.on_message(filters.command('start') & filters.private)
 async def not_joined(client: Client, message: Message):
-    FORCE_SUB_CHANNELS = await get_force_sub_channels()
-
-    if not FORCE_SUB_CHANNELS:
-        await message.reply("No force-subscribe channels are set!")
-        return
-
+    # Initialize buttons list
     buttons = []
-    not_joined_channels = []
 
-    # Check membership for each channel
-    for channel in FORCE_SUB_CHANNELS:
-        try:
-            member = await client.get_chat_member(chat_id=channel['id'], user_id=message.from_user.id)
-            if member.status not in ["owner", "administrator", "member"]:
-                not_joined_channels.append(channel)
-        except Exception:
-            not_joined_channels.append(channel)  # Assume not joined if error occurs
+    # Check if the first and second channels are both set
+    if FORCE_SUB_CHANNEL1 and FORCE_SUB_CHANNEL2:
+        buttons.append([
+            InlineKeyboardButton(text="🌟𝗝𝗼𝗶𝗻 𝟭𝘀𝘁🌟", url=client.invitelink1),
+            InlineKeyboardButton(text="👻𝗝𝗼𝗶𝗻 𝟮𝗻𝗱👻", url=client.invitelink2),
+        ])
+    # Check if only the first channel is set
+    elif FORCE_SUB_CHANNEL1:
+        buttons.append([
+            InlineKeyboardButton(text="🌟𝗝𝗼𝗶𝗻 𝟭𝘀𝘁🌟", url=client.invitelink1)
+        ])
+    # Check if only the second channel is set
+    elif FORCE_SUB_CHANNEL2:
+        buttons.append([
+            InlineKeyboardButton(text="👻𝗝𝗼𝗶𝗻 𝟮𝗻𝗱👻", url=client.invitelink2)
+        ])
 
-    # Generate invite links for unjoined channels
-    if not_joined_channels:
-        for channel in not_joined_channels:
-            try:
-                if channel['join_request']:
-                    invite = await client.create_chat_invite_link(
-                        chat_id=channel['id'],
-                        creates_join_request=True
-                    )
-                    ButtonUrl = invite.invite_link
-                else:
-                    try:
-                        # Try to get chat to check if it's a username
-                        chat = await client.get_chat(channel['id'])
-                        ButtonUrl = chat.invite_link
-                        if not ButtonUrl:
-                            # Fallback for channels without invite links
-                            ButtonUrl = f"https://t.me/c/{str(channel['id']).replace('-100', '')}/1"
-                    except UsernameInvalid:
-                        # Handle numeric IDs directly
-                        ButtonUrl = f"https://t.me/c/{str(channel['id']).replace('-100', '')}/1"
-                    except ChatAdminRequired:
-                        await message.reply(f"Cannot generate invite link for {channel['name']} ({channel['id']}): Bot lacks admin permissions.")
-                        continue
-                buttons.append(
-                    InlineKeyboardButton(
-                        text=f"Join {channel['name']}",
-                        url=ButtonUrl
-                    )
-                )
-            except Exception as e:
-                await message.reply(f"Error generating invite link for {channel['name']} ({channel['id']}): {str(e)}")
-                continue
+    # Check if the third and fourth channels are set
+    if FORCE_SUB_CHANNEL3 and FORCE_SUB_CHANNEL4:
+        buttons.append([
+            InlineKeyboardButton(text="‼️𝗝𝗼𝗶𝗻 𝟯𝗿𝗱‼️", url=client.invitelink3),
+            InlineKeyboardButton(text="‼️𝗝𝗼𝗶𝗻 𝟰𝘁𝗵‼️", url=client.invitelink4),
+        ])
+    # Check if only the first channel is set
+    elif FORCE_SUB_CHANNEL3:
+        buttons.append([
+            InlineKeyboardButton(text="‼️𝗝𝗼𝗶𝗻 𝟯𝗿𝗱‼️", url=client.invitelink3)
+        ])
+    # Check if only the second channel is set
+    elif FORCE_SUB_CHANNEL4:
+        buttons.append([
+            InlineKeyboardButton(text="‼️𝗝𝗼𝗶𝗻 𝟰𝘁𝗵‼️", url=client.invitelink4)
+        ])
 
-        if not buttons:
-            await message.reply("Unable to generate invite links for any channels. Please contact the admin.")
-            return
-
-        # Organize buttons in rows of two
-        button_rows = [buttons[i:i+2] for i in range(0, len(buttons), 2)]
-
-        try:
-            button_rows.append(
-                [
-                    InlineKeyboardButton(
-                        text="Try Again",
-                        url=f"https://t.me/{client.username}?start={message.command[1]}"
-                    )
-                ]
+    # Append "Try Again" button if the command has a second argument
+    try:
+        buttons.append([
+            InlineKeyboardButton(
+                text="♻️ 𝐓𝐑𝐘 𝐀𝐆𝐀𝐈𝐍 ♻️",
+                url=f"https://t.me/{client.username}?start={message.command[1]}"
             )
-        except IndexError:
-            pass
+        ])
+    except IndexError:
+        pass  # Ignore if no second argument is present
 
-        await message.reply(
-            text=FORCE_MSG.format(
-                first=message.from_user.first_name,
-                last=message.from_user.last_name,
-                username=None if not message.from_user.username else '@' + message.from_user.username,
-                mention=message.from_user.mention,
-                id=message.from_user.id
-            ),
-            reply_markup=InlineKeyboardMarkup(button_rows),
-            quote=True,
-            disable_web_page_preview=True
-        )
+    await message.reply_photo(
+        photo=FORCE_PIC,
+        caption=FORCE_MSG.format(
+        first=message.from_user.first_name,
+        last=message.from_user.last_name,
+        username=None if not message.from_user.username else '@' + message.from_user.username,
+        mention=message.from_user.mention,
+        id=message.from_user.id
+    ),
+    reply_markup=InlineKeyboardMarkup(buttons)#,
+    #message_effect_id=5104841245755180586  # Add the effect ID here
+)
 
 # Management commands
 @Bot.on_message(filters.private & filters.command('addforcesub') & filters.user(ADMINS))
