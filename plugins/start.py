@@ -120,7 +120,7 @@ async def start_command(client: Client, message: Message):
             except Exception as e:
                 await message.reply_text(f"Error copying message: {str(e)}")
         
-            await asyncio.sleep(0.4)
+            await asyncio.sleep(2)
 
         if AUTO_DELETE_TIME > 0:
             notification_msg = await message.reply(
